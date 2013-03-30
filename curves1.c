@@ -13,7 +13,7 @@
 #include <float.h>
 
 //The available calculation methods
-typedef enum {heronAndCalc, heron, calc, doubleDeriv, parabola} METHOD;
+typedef enum {heronAndCalc, heron, calc, doubleDeriv, parabola, slopem} METHOD;
 
 //A structure to hold a 2D data point
 struct _point {
@@ -271,6 +271,16 @@ double parabolaCurvature(Point* one, Point* two,Point* three){
   return ydoubleprime/sqrt(cube(1+square(yprime)));
 }
 
+/** Calculates the slope of two points
+ * @param one The first data point
+ * @param two The second data point
+ * @returns The slope of line between two points
+ * @author Steven Kordell
+*/ 
+double slope(Point* one, Point* two){
+  return (two->y - one->y)/(two->y - two->x);
+}
+
 /** Determines the sampling interval of a profile
  * @param profile A point array representing the profile (must contain at least two points)
  * @return The sampling interval of the profile
@@ -318,6 +328,22 @@ Point* curvatureAtScale(Point* profile, int size, double scale, METHOD method) {
     }  
   }
   return curves;
+}
+
+
+Point* slopeAtScale(Point* profile, int size, double scale) {
+  Point* one = profile;
+  Point* two = profile + (int)(scale/samplingInterval(profile));
+
+  Point* slopes = (Point*) malloc(sizeof(Point) * size);
+  initializePointsToNaN(slopes,size); //initialize the array
+  Point* p = slopes;
+
+  while (two < (profile+size)) {
+    p->x = two->x;
+    (p++)->y = slope(one++,two++);
+  }
+  return slopes;
 }
 
 /** Determines the length of a profile 
@@ -532,6 +558,17 @@ Point** curvatureAtScales(Point* profile, int pointCount, double* scalesToCalcul
   return arrayOfCurvatures;
 }
 
+
+Point** slopeAtScales(Point* profile, int pointCount, double* scalesToCalculate, int scaleCount) {
+  Point** arrayOfSlopes = (Point**) malloc(sizeof(Point*) * scaleCount);
+  int i;  
+  for(i = 0; i < scaleCount; i++) {
+    arrayOfSlopes[i] = slopeAtScale(profile, pointCount, scalesToCalculate[i]);  
+  }
+  return arrayOfSlopes;
+}
+
+
 /** Converts the curvature to a log scale axis
  * @param curvatureAtMultipleScales An multidimmensional array of curvatures and scales to convert (in place)
  * @param pointCount The number of points in each scale
@@ -573,7 +610,7 @@ void makePositionLog(Point** curvatureAtMultipleScales,int pointCount, int scale
 }
 
 /** Converts the scale to a log scale axis
- * @param curvatureAtMultipleScales An multidimmensional array of curvatures and scales to convert (in place)
+* @param curvatureAtMultipleScales An multidimmensional array of curvatures and scales to convert (in place)
  * @param pointCount The number of points in each scale
  * @param scaleCount The number of scales used to build the array
  * @author Steven Kordell
@@ -713,7 +750,7 @@ void printHelp() {
     printf("Enter \"-p\" followed by the path of the profile to load.\n\n");
 
     printf("Select a calculation method:\n");
-    printf("Enter \"-m\" followed by a method idtentifier. c = calculus method, h = herons method, ch = hybrid calculus and herons, d = double derivitive approximation, p = parabola\n\n");    
+    printf("Enter \"-m\" followed by a method idtentifier. c = calculus method, h = herons method, ch = hybrid calculus and herons, d = double derivitive approximation, p = parabola, s = slope\n\n");    
 
     printf("Selecting scales to calculate:\n");
     printf("Enter \"-s\" followed by any of the folloing.\n");
@@ -884,6 +921,9 @@ int main (int argc, char *argv[]) {
     if (!strcmp(argv[paramIndex+1],"p")) {
       method = parabola;
     }  
+    if (!strcmp(argv[paramIndex+1],"s")) {
+      method = slopem;
+    }  
   }
 
   //Read in the scale and calculate the curvatures
@@ -892,12 +932,20 @@ int main (int argc, char *argv[]) {
     fflush(stdout);
     if (!strcmp(argv[paramIndex+1],"all")) {
       scalesToCalculate = allPossibleScales(profile,pointCount, &scaleCount);
-      curvatureAtMultipleScales = curvatureAtScales(profile, pointCount, scalesToCalculate, scaleCount, method);
+      if (method != slopem) {
+	curvatureAtMultipleScales = curvatureAtScales(profile, pointCount, scalesToCalculate, scaleCount, method);
+      } else {
+	curvatureAtMultipleScales = slopeAtScales(profile, pointCount, scalesToCalculate, scaleCount);
+      }
       printf("DONE! - %d scales calculated.\n",scaleCount);
     } else {
       scalesToCalculate = determineScalesToCalculate(argv[paramIndex+1], &scaleCount,samplingInterval(profile),profileLength(profile,pointCount));
       if (scaleCount > 0) {
-	curvatureAtMultipleScales = curvatureAtScales(profile, pointCount, scalesToCalculate, scaleCount, method);
+	if (method != slopem) {
+	  curvatureAtMultipleScales = curvatureAtScales(profile, pointCount, scalesToCalculate, scaleCount, method);
+	} else {
+	  curvatureAtMultipleScales = slopeAtScales(profile, pointCount, scalesToCalculate, scaleCount);
+	}
 	printf("DONE! - %d scales calculated.\n",scaleCount);
       } else {
 	printf("NO VALID SCALES ENTERED\n");
